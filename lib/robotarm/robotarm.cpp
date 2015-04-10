@@ -1,0 +1,202 @@
+#include "robotarm.h"
+
+robotarm::robotarm()
+{
+	heightLst		= 0;
+	height			= 0;
+	stretch			= 0;
+	rotation		= 0;
+}
+
+void robotarm::init()
+{
+	//define Servo pins
+	servoR.attach(SERVO_R,D150A_SERVO_MIN_PUL,D150A_SERVO_MAX_PUL);
+	servoL.attach(SERVO_L,D150A_SERVO_MIN_PUL,D150A_SERVO_MAX_PUL);
+//	servoRot.attach(SERVO_ROT,D150A_SERVO_MIN_PUL,D150A_SERVO_MAX_PUL);
+	pinMode(MAGNET, OUTPUT);
+	magnetON=false;
+	servoR.stop();
+	servoL.stop();
+	servoRot.stop();
+}
+
+void robotarm::stop()
+{
+	servoR.stop();
+	servoL.stop();
+	servoRot.stop();
+}
+void robotarm::grab()
+{
+	if (magnetON)
+	{
+		digitalWrite(MAGNET, LOW);
+		magnetON=false;
+		Serial.println("Magnet OFF");
+	}
+	else
+	{
+		digitalWrite(MAGNET,HIGH);
+		magnetON=true;
+		Serial.println("Magnet ON");
+	}
+}
+void robotarm::setPosition(double _stretch, double _height, int _armRot)
+{
+	_armRot = -_armRot;
+	// input limit
+	_stretch = constrain(_stretch, ARM_STRETCH_MIN,   ARM_STRETCH_MAX)+55;		// +55, set zero -stretch 
+	_height  = constrain(_height,  ARM_HEIGHT_MIN,    ARM_HEIGHT_MAX);
+	_armRot  = constrain(_armRot,  ARM_ROTATION_MIN,  ARM_ROTATION_MAX) + 90;		// +90, change -90~90 to 0~180
+	// angle calculation
+	double stretch2height2 = _stretch * _stretch + _height * _height;              // 
+	double angleA = (acos( (stretch2height2 - ARM_A2B2) / ARM_2AB )) * RAD_TO_DEG; // angle between the upper and the lower
+	double angleB = (atan(_height/_stretch)) * RAD_TO_DEG;                         // 
+	double angleC = (acos((ARM_A2 + stretch2height2 -ARM_B2)/(2 * ARM_A * sqrt(stretch2height2)))) * RAD_TO_DEG; // 
+	int angleL = angleB + angleC; 
+	int angleR = angleA - angleB - angleC;        // 
+                      // 
+	// angle limit
+	angleL = constrain(angleL, MIN_POS_L, MAX_POS_L);
+	angleR = constrain(angleR, MIN_POS_R, MAX_POS_R);
+	angleR = constrain(angleR, angleL - 90, angleR);	// behind  -120+30 = -90
+	if(angleL<15)	angleR = constrain(angleR, 70, angleR);			// front down
+	// set servo position
+	setAngle(SERVO_R,angleR);
+	setAngle(SERVO_L,angleL);
+	setAngle(SERVO_ROT,_armRot);
+
+	Serial.print("angleL= ");
+	Serial.println(angleL);
+	Serial.print("angleR= ");
+	Serial.println(angleR);	
+	Serial.print("angleRot= ");
+	Serial.println(_armRot);	
+
+}
+
+void robotarm::getPosition()
+{
+	double angleL=(readAngle(SERVO_L))*DEG_TO_RAD;
+	double angleR=(readAngle(SERVO_R))*DEG_TO_RAD;
+	double angleRot=readAngle(SERVO_ROT);
+	double stretch = ARM_A*cos(angleL) + ARM_B*cos(angleR);
+	double height = ARM_A*sin(angleL) - ARM_B*sin(angleR);
+	Serial.print("current position: (");
+	Serial.print(stretch);
+	Serial.print(", ");
+	Serial.print(height);
+	Serial.print(", ");
+	Serial.print(angleRot);
+	Serial.println(")");
+	
+}
+
+void robotarm::setAngle(char _servo,double _angle)
+{
+	switch(_servo)
+	{
+		case SERVO_L:
+			currentAngle=readAngle(SERVO_L);
+			_angle = constrain(_angle, MIN_POS_L, MAX_POS_L);
+			if( currentAngle < _angle)
+			{
+				for(int i=currentAngle;i<_angle;i++) 
+				{
+					servoL.write(i + FIXED_OFFSET_L);
+					delay(15);
+				}
+			}
+			else
+			{
+				for(int i=currentAngle;i>_angle;i--)
+				{
+					servoL.write(i + FIXED_OFFSET_L);
+					delay(15);
+				}
+			}
+			break;
+		case SERVO_R:
+			currentAngle=readAngle(SERVO_R);
+			_angle = constrain(_angle, MIN_POS_R, MAX_POS_R);
+			if( currentAngle < _angle)
+			{
+				for(int i=currentAngle;i<_angle;i++)
+				{
+					servoR.write(i + FIXED_OFFSET_R);
+					delay(15);
+				}
+			}
+			else
+			{
+				for(int i=currentAngle;i>_angle;i--)
+				{
+					servoR.write(i + FIXED_OFFSET_R);
+					delay(15);
+				}
+			}
+			break;
+		case SERVO_ROT:
+			_angle = constrain(_angle, MIN_POS_ROT, MAX_POS_ROT);
+			currentAngle=readAngle(SERVO_ROT);
+			if( currentAngle < _angle)
+			{
+				for(int i=currentAngle;i<_angle;i++)
+				{
+					servoRot.write(i + FIXED_OFFSET_ROT);
+					delay(15);
+				}
+			}
+			else
+			{
+				for(int i=currentAngle;i>_angle;i--)
+				{
+					servoRot.write(i + FIXED_OFFSET_ROT);
+					delay(15);
+				}
+			}
+			break;
+		default:
+			Serial.println("no servo with this name.");
+			break;
+	}
+}
+
+int robotarm::readAngle(char _servo)
+{
+	switch(_servo)
+	{
+		case SERVO_L:
+			return (servoL.read()-FIXED_OFFSET_L);
+		case SERVO_R:
+			return (servoR.read()-FIXED_OFFSET_R);
+		case SERVO_ROT:
+			return servoRot.read();
+		default: break;
+	}
+}
+
+void robotarm::detachServo(char _servo)
+{
+	switch(_servo)
+	{
+		case SERVO_L:
+			servoL.detach();
+			break;
+		case SERVO_R:
+			servoR.detach();
+			break;
+		case SERVO_ROT:
+			servoRot.detach();
+			break;
+		default: break;
+	}
+}
+
+void robotarm::stabilize()
+{
+	setAngle(SERVO_L,readAngle(SERVO_L));
+	setAngle(SERVO_R,readAngle(SERVO_R));
+	setAngle(SERVO_ROT,readAngle(SERVO_ROT));
+}

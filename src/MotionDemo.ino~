@@ -1,0 +1,124 @@
+#include <robotarm.h>
+#include <SoftwareSerial.h>
+
+robotarm rarm;           
+char dataBuf[2] = {0};
+char stateMachine = 0, counter=0;
+int  heightTemp  = 0, stretchTemp = 0;
+String string;
+int incoming;
+int rxBuf;
+int rxBuff;
+//SoftwareSerial portTwo(6,7);
+
+
+void setup() 
+{
+	Serial.begin(19200);
+//	portTwo.begin(19200);
+//	establishContact();
+//	portTwo.println("initiating servos...");
+	rarm.init();          // attach the servos
+//	portTwo.println("initiated");
+	delay(500);
+	Serial.println("Ready");
+}
+
+void establishContact() {
+//	portTwo.listen();
+//	while (portTwo.available() <= 0)
+	{
+		Serial.println("waiting for processing to start");   // send a capital A
+		delay(300);
+	}
+}
+
+
+void loop()
+{
+//	rarm.stabilize();
+//	Monitor();
+//	MonitorSerial();
+//	test();
+//	MouseControl();
+//	graber();
+//	send();
+//	rarm.stop();
+	rarm.setPosition(0,0,0);
+	delay(1000);
+}
+
+void graber()
+{
+	incoming=0;
+	if (Serial.available())
+	{
+		incoming = Serial.read();
+		if (incoming!=0)
+		{
+			rarm.grab();
+		}
+	}
+}
+
+void Monitor()
+{
+//	if ( portTwo.available())
+	{
+//		byte rxBuff = portTwo.read();
+		if (rxBuff != 0xFF && rxBuff != 0xAA) Serial.println(rxBuff);
+	}
+}
+
+void MonitorSerial()
+{
+	if ( Serial.available())
+	{
+		byte rxBuff = Serial.read();
+//		 portTwo.println(rxBuff);
+	}
+}
+
+void test()
+{
+	rarm.setPosition(0,0,0);
+	delay(1000);
+	rarm.setAngle(SERVO_R, 90);
+	delay(1000);
+	rarm.setAngle(SERVO_R, 0);
+	delay(1000);
+}
+void MouseControl()
+{
+//	if ( portTwo.available())
+	{
+//		byte rxBuf = portTwo.read();
+		if(stateMachine == 0)
+		{
+			stateMachine = rxBuf == 0xFF? 1:0;
+		}
+		else if(stateMachine == 1)
+		{
+			stateMachine = rxBuf == 0xAA? 2:0;
+		}	
+		else if(stateMachine == 2)
+		{
+			dataBuf[counter++] = rxBuf;
+			if(counter > 1)  // receive 4 byte data
+			{
+				stateMachine = 0;
+				counter=0;
+				if(dataBuf[0]<0) stretchTemp=256+dataBuf[0];
+				else stretchTemp=dataBuf[0];
+				if(dataBuf[1]<0) heightTemp=256+dataBuf[1]; 
+				else heightTemp = dataBuf[1];
+				Serial.print("stetchTemp= ");
+				Serial.print(stretchTemp);
+				Serial.print(" heightTemp= ");
+				Serial.println(heightTemp); 
+				rarm.setPosition(stretchTemp, heightTemp, 0);
+//				portTwo.flush();
+			}
+		}
+	}
+}
